@@ -1,5 +1,6 @@
 /* global React */
-// userhub.jsx — Auth (mock Google) + Notes (post-it system)
+// userhub.jsx — Email/password auth modal + AuthBadge (now Supabase-backed)
+// The Store + data API live in supabase-client.jsx.
 
 const USER_COLORS = [
   { name: 'Crimson',  hex: '#e85a4f' },
@@ -13,120 +14,11 @@ const USER_COLORS = [
 ];
 window.USER_COLORS = USER_COLORS;
 
-// ─── Shared store ──────────────────────────────────────────────────────
-const safeParse = (s, fallback) => {
-  try { return JSON.parse(s) ?? fallback; } catch { return fallback; }
-};
-
-const Store = {
-  _user:  safeParse(localStorage.getItem('myrtavia.user'),  null),
-  _users: safeParse(localStorage.getItem('myrtavia.users'), []),
-  _notes: safeParse(localStorage.getItem('myrtavia.notes'), []),
-  _markers: safeParse(localStorage.getItem('myrtavia.markers'), []),
-  _listeners: new Set(),
-
-  subscribe(fn) { this._listeners.add(fn); return () => this._listeners.delete(fn); },
-  _emit() { this._listeners.forEach(fn => fn()); },
-
-  getUser()  { return this._user; },
-  getUsers() { return this._users; },
-
-  setUser(u) {
-    this._user = u;
-    if (u) {
-      localStorage.setItem('myrtavia.user', JSON.stringify(u));
-      const rest = this._users.filter(x => x.id !== u.id);
-      this._users = [u, ...rest].slice(0, 6);
-      localStorage.setItem('myrtavia.users', JSON.stringify(this._users));
-    } else {
-      localStorage.removeItem('myrtavia.user');
-    }
-    this._emit();
-  },
-
-  getNotes(regionId, poiId) {
-    let n = this._notes;
-    if (regionId) n = n.filter(x => x.regionId === regionId);
-    if (poiId)    n = n.filter(x => x.poiId    === poiId);
-    return n.slice().sort((a, b) => b.ts - a.ts);
-  },
-
-  addNote(note) {
-    const full = {
-      id: `n_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-      ts: Date.now(),
-      ...note,
-    };
-    this._notes = [...this._notes, full];
-    localStorage.setItem('myrtavia.notes', JSON.stringify(this._notes));
-    this._emit();
-  },
-
-  removeNote(id) {
-    this._notes = this._notes.filter(n => n.id !== id);
-    localStorage.setItem('myrtavia.notes', JSON.stringify(this._notes));
-    this._emit();
-  },
-
-  getMarkers(scope) {
-    let m = this._markers;
-    if (scope) m = m.filter(x => x.scope === scope);
-    return m.slice().sort((a, b) => a.ts - b.ts);
-  },
-
-  addMarker(marker) {
-    const full = {
-      id: `m_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-      ts: Date.now(),
-      ...marker,
-    };
-    this._markers = [...this._markers, full];
-    localStorage.setItem('myrtavia.markers', JSON.stringify(this._markers));
-    this._emit();
-    return full;
-  },
-
-  removeMarker(id) {
-    this._markers = this._markers.filter(m => m.id !== id);
-    localStorage.setItem('myrtavia.markers', JSON.stringify(this._markers));
-    this._emit();
-  },
-};
-window.MyrtaviaStore = Store;
-
-function useStore() {
-  const [, force] = React.useState(0);
-  React.useEffect(() => Store.subscribe(() => force(x => x + 1)), []);
-  return Store;
-}
-window.useMyrtaviaStore = useStore;
-
-// ─── Helpers ────────────────────────────────────────────────────────────
-function formatRel(ts) {
-  const diff = Date.now() - ts;
-  if (diff < 60_000)       return 'just now';
-  if (diff < 3_600_000)    return `${Math.floor(diff / 60_000)}m ago`;
-  if (diff < 86_400_000)   return `${Math.floor(diff / 3_600_000)}h ago`;
-  if (diff < 604_800_000)  return `${Math.floor(diff / 86_400_000)}d ago`;
-  return new Date(ts).toLocaleDateString();
-}
-window.formatRel = formatRel;
-
-function GoogleG({ size = 18 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 18 18" aria-hidden="true">
-      <path d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.79 2.71v2.26h2.9c1.7-1.56 2.69-3.87 2.69-6.61z" fill="#4285F4"/>
-      <path d="M9 18c2.43 0 4.47-.81 5.96-2.18l-2.91-2.26c-.8.54-1.83.86-3.05.86-2.34 0-4.33-1.58-5.04-3.71H.96v2.33A9 9 0 0 0 9 18z" fill="#34A853"/>
-      <path d="M3.96 10.71A5.41 5.41 0 0 1 3.68 9c0-.59.1-1.17.28-1.71V4.96H.96A8.997 8.997 0 0 0 0 9c0 1.45.35 2.83.96 4.04l3-2.33z" fill="#FBBC05"/>
-      <path d="M9 3.58c1.32 0 2.51.45 3.44 1.35l2.58-2.58A8.997 8.997 0 0 0 9 0 9 9 0 0 0 .96 4.96l3 2.33C4.67 5.16 6.66 3.58 9 3.58z" fill="#EA4335"/>
-    </svg>
-  );
-}
-
 // ─── AuthBadge ─────────────────────────────────────────────────────────
-function AuthBadge({ onOpenSignIn }) {
-  const store = useStore();
+function AuthBadge({ onOpenSignIn, onOpenCampaigns }) {
+  const store = window.useMyrtaviaStore();
   const user = store.getUser();
+  const active = store.getActiveCampaign();
   const [open, setOpen] = React.useState(false);
 
   React.useEffect(() => {
@@ -138,11 +30,18 @@ function AuthBadge({ onOpenSignIn }) {
     return () => window.removeEventListener('mousedown', close);
   }, [open]);
 
+  if (!store.isReady()) {
+    return <div className="auth-loading">Connecting…</div>;
+  }
+
   if (!user) {
     return (
       <button className="auth-btn-signin" onClick={onOpenSignIn}>
-        <GoogleG />
-        <span>Sign in with Google</span>
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+          <path d="M7 8 a3 3 0 1 0 0 -6 a3 3 0 0 0 0 6 z"/>
+          <path d="M2 13 c0 -3 2 -4 5 -4 s5 1 5 4"/>
+        </svg>
+        <span>Sign in</span>
       </button>
     );
   }
@@ -152,7 +51,10 @@ function AuthBadge({ onOpenSignIn }) {
     <div className="auth-badge-wrap">
       <button className="auth-badge" onClick={() => setOpen(o => !o)}>
         <span className="auth-avatar" style={{ background: user.color }}>{initial}</span>
-        <span className="auth-name">{user.name}</span>
+        <span className="auth-name-stack">
+          <span className="auth-name">{user.name}</span>
+          {active && <span className="auth-campaign">{active.name}</span>}
+        </span>
         <svg width="10" height="10" viewBox="0 0 10 10" className="auth-caret">
           <path d="M2 4 L5 7 L8 4" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round"/>
         </svg>
@@ -163,15 +65,27 @@ function AuthBadge({ onOpenSignIn }) {
             <span className="auth-avatar lg" style={{ background: user.color }}>{initial}</span>
             <div className="auth-menu-info">
               <div className="auth-menu-name">{user.name}</div>
-              <div className="auth-menu-email">{user.email || '— no email —'}</div>
+              <div className="auth-menu-email">{user.email}</div>
             </div>
           </div>
-          <div className="auth-menu-stats">
-            <span>{Store.getNotes().filter(n => n.userId === user.id).length} notes</span>
-            <span className="dot">·</span>
-            <span style={{ color: user.color }}>your color</span>
-          </div>
-          <button className="auth-menu-item" onClick={() => { Store.setUser(null); setOpen(false); }}>
+          {active ? (
+            <div className="auth-menu-campaign">
+              <div className="amc-label">Active campaign</div>
+              <div className="amc-name">{active.name}</div>
+              <div className="amc-code">code: <code>{active.invite_code}</code></div>
+            </div>
+          ) : (
+            <div className="auth-menu-campaign empty">
+              <em>No active campaign</em>
+            </div>
+          )}
+          <button className="auth-menu-item" onClick={() => { setOpen(false); onOpenCampaigns(); }}>
+            Manage campaigns…
+          </button>
+          <button className="auth-menu-item" onClick={async () => {
+            setOpen(false);
+            await window.MyrtaviaStore.signOut();
+          }}>
             Sign out
           </button>
         </div>
@@ -181,27 +95,18 @@ function AuthBadge({ onOpenSignIn }) {
 }
 window.AuthBadge = AuthBadge;
 
-// ─── SignInModal ───────────────────────────────────────────────────────
+// ─── SignInModal — Email/password ──────────────────────────────────────
 function SignInModal({ onClose }) {
-  const store = useStore();
-  const knownUsers = store.getUsers();
-  const [step, setStep] = React.useState(knownUsers.length > 0 ? 'choose' : 'new');
-  const [name, setName]   = React.useState('');
+  const [mode, setMode] = React.useState('signin'); // 'signin' | 'signup'
   const [email, setEmail] = React.useState('');
-  const [color, setColor] = React.useState(USER_COLORS[Math.floor(Math.random() * USER_COLORS.length)].hex);
-
-  const submit = () => {
-    if (!name.trim()) return;
-    Store.setUser({
-      id: `u_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-      name: name.trim(),
-      email: email.trim(),
-      color,
-    });
-    onClose();
-  };
-
-  const useExisting = (u) => { Store.setUser(u); onClose(); };
+  const [password, setPassword] = React.useState('');
+  const [name, setName] = React.useState('');
+  const [color, setColor] = React.useState(
+    USER_COLORS[Math.floor(Math.random() * USER_COLORS.length)].hex
+  );
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState('');
+  const [success, setSuccess] = React.useState('');
 
   React.useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
@@ -209,63 +114,107 @@ function SignInModal({ onClose }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
+  const doSignIn = async () => {
+    if (!email || !password) return;
+    setBusy(true); setError(''); setSuccess('');
+    try {
+      await window.MyrtaviaStore.signIn({ email: email.trim(), password });
+      onClose();
+    } catch (e) {
+      setError(e.message || 'Could not sign in.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const doSignUp = async () => {
+    if (!email || !password || !name.trim()) return;
+    setBusy(true); setError(''); setSuccess('');
+    try {
+      const res = await window.MyrtaviaStore.signUp({
+        email: email.trim(), password, name: name.trim(), color,
+      });
+      // If email confirmation is required, res.session is null.
+      if (!res.session) {
+        setSuccess('Check your email to confirm your address, then sign in.');
+        setMode('signin');
+      } else {
+        onClose();
+      }
+    } catch (e) {
+      setError(e.message || 'Could not create account.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const canSubmit = mode === 'signin'
+    ? !!email && !!password
+    : !!email && password.length >= 6 && !!name.trim();
+
   return (
     <div className="signin-overlay" onClick={onClose}>
       <div className="signin-card" onClick={e => e.stopPropagation()}>
         <button className="signin-close" onClick={onClose} aria-label="Close">×</button>
 
         <div className="signin-head">
-          <div className="signin-logo"><GoogleG size={32} /></div>
-          <div className="signin-title">Sign in to Myrtavia</div>
-          <div className="signin-subtitle">
-            {step === 'choose' ? 'Choose an account' : 'to save your campaign notes'}
+          <div className="signin-brand">
+            <svg width="36" height="36" viewBox="0 0 32 32" fill="none">
+              <circle cx="16" cy="16" r="14" stroke="#c9a961" strokeWidth="1.4"/>
+              <path d="M8 16 Q16 7 24 16 Q16 25 8 16 Z" stroke="#c9a961" strokeWidth="1.4" fill="none"/>
+              <circle cx="16" cy="16" r="3" fill="#c9a961"/>
+            </svg>
+          </div>
+          <div className="signin-title-myrt">
+            {mode === 'signin' ? 'Welcome back, traveler' : 'Begin your chronicle'}
+          </div>
+          <div className="signin-subtitle-myrt">
+            {mode === 'signin'
+              ? 'Sign in to access your campaigns and notes'
+              : 'Create an account to save your notes across devices'}
           </div>
         </div>
 
-        {step === 'choose' && (
-          <div className="signin-accounts">
-            {knownUsers.map(u => (
-              <button key={u.id} className="signin-account" onClick={() => useExisting(u)}>
-                <span className="signin-account-avatar" style={{ background: u.color }}>
-                  {u.name.charAt(0).toUpperCase()}
-                </span>
-                <div className="signin-account-info">
-                  <div className="signin-account-name">{u.name}</div>
-                  <div className="signin-account-email">{u.email || '— no email —'}</div>
-                </div>
-              </button>
-            ))}
-            <button className="signin-account use-another" onClick={() => setStep('new')}>
-              <span className="signin-account-avatar plus">+</span>
-              <div className="signin-account-info">
-                <div className="signin-account-name">Use another account</div>
-              </div>
-            </button>
-          </div>
-        )}
-
-        {step === 'new' && (
-          <div className="signin-form">
+        <div className="signin-form myrtavia">
+          {mode === 'signup' && (
             <label>
-              <span className="signin-label-text">Name</span>
+              <span className="signin-label-text-m">Display name</span>
               <input
                 type="text" value={name}
                 onChange={e => setName(e.target.value)}
-                placeholder="Display name"
+                placeholder="The name fellow players see"
                 autoFocus
-                onKeyDown={e => e.key === 'Enter' && submit()}
               />
             </label>
-            <label>
-              <span className="signin-label-text">Email <em>(optional)</em></span>
-              <input
-                type="email" value={email}
-                onChange={e => setEmail(e.target.value)}
-                placeholder="you@example.com"
-              />
-            </label>
+          )}
+          <label>
+            <span className="signin-label-text-m">Email</span>
+            <input
+              type="email" value={email}
+              onChange={e => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              autoFocus={mode === 'signin'}
+            />
+          </label>
+          <label>
+            <span className="signin-label-text-m">
+              Password {mode === 'signup' && <em>(min 6 characters)</em>}
+            </span>
+            <input
+              type="password" value={password}
+              onChange={e => setPassword(e.target.value)}
+              placeholder="••••••••"
+              minLength={mode === 'signup' ? 6 : undefined}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && canSubmit && !busy) {
+                  mode === 'signin' ? doSignIn() : doSignUp();
+                }
+              }}
+            />
+          </label>
+          {mode === 'signup' && (
             <div className="signin-color-group">
-              <span className="signin-label-text">Your note color</span>
+              <span className="signin-label-text-m">Your note &amp; marker color</span>
               <div className="signin-colors">
                 {USER_COLORS.map(c => (
                   <button
@@ -279,19 +228,32 @@ function SignInModal({ onClose }) {
                 ))}
               </div>
             </div>
-            <button className="signin-submit" onClick={submit} disabled={!name.trim()}>
-              Continue
-            </button>
-            {knownUsers.length > 0 && (
-              <button className="signin-back" onClick={() => setStep('choose')}>
-                ← Back to accounts
-              </button>
-            )}
-          </div>
-        )}
+          )}
+
+          {error && <div className="signin-error myrt">{error}</div>}
+          {success && <div className="signin-success">{success}</div>}
+
+          <button
+            className="signin-submit myrt"
+            onClick={mode === 'signin' ? doSignIn : doSignUp}
+            disabled={!canSubmit || busy}
+          >
+            {busy ? '…' : (mode === 'signin' ? 'Enter Myrtavia' : 'Create account')}
+          </button>
+
+          <button
+            className="signin-mode-switch"
+            type="button"
+            onClick={() => { setMode(mode === 'signin' ? 'signup' : 'signin'); setError(''); setSuccess(''); }}
+          >
+            {mode === 'signin'
+              ? "New to Myrtavia? Create an account →"
+              : '← Already have an account? Sign in'}
+          </button>
+        </div>
 
         <div className="signin-footer">
-          <span>Prototype · Notes are stored locally in this browser</span>
+          <span>Notes and markers sync across all your devices.</span>
         </div>
       </div>
     </div>
@@ -299,9 +261,9 @@ function SignInModal({ onClose }) {
 }
 window.SignInModal = SignInModal;
 
-// ─── NotePostits — visual indicator on a hotspot ───────────────────────
+// ─── NotePostits & HotspotNotes (visual indicator and notes UI) ────────
 function NotePostits({ regionId, poiId }) {
-  const store = useStore();
+  const store = window.useMyrtaviaStore();
   const notes = store.getNotes(regionId, poiId);
   if (notes.length === 0) return null;
   const colors = [...new Set(notes.map(n => n.userColor))].slice(0, 3);
@@ -320,29 +282,25 @@ function NotePostits({ regionId, poiId }) {
 }
 window.NotePostits = NotePostits;
 
-// ─── HotspotNotes — full notes UI inside a hotspot card ────────────────
-function HotspotNotes({ regionId, poiId, onSignIn, compact }) {
-  const store = useStore();
+function HotspotNotes({ regionId, poiId, onSignIn }) {
+  const store = window.useMyrtaviaStore();
   const user = store.getUser();
+  const campaign = store.getActiveCampaign();
   const notes = store.getNotes(regionId, poiId);
   const [text, setText] = React.useState('');
   const [adding, setAdding] = React.useState(false);
 
-  const submit = () => {
-    if (!text.trim() || !user) return;
-    Store.addNote({
-      regionId, poiId,
-      userId: user.id,
-      userName: user.name,
-      userColor: user.color,
-      text: text.trim(),
+  const submit = async () => {
+    if (!text.trim() || !user || !campaign) return;
+    await window.MyrtaviaStore.addNote({
+      regionId, poiId, text: text.trim(),
     });
     setText('');
     setAdding(false);
   };
 
   return (
-    <div className={`hotspot-notes ${compact ? 'compact' : ''}`}>
+    <div className="hotspot-notes">
       <div className="hotspot-notes-header">
         <span className="hotspot-notes-title">Campaign Notes</span>
         {notes.length > 0 && <span className="hotspot-notes-count">{notes.length}</span>}
@@ -359,11 +317,11 @@ function HotspotNotes({ regionId, poiId, onSignIn, compact }) {
                   </span>
                   {n.userName}
                 </span>
-                <span className="note-card-time">{formatRel(n.ts)}</span>
+                <span className="note-card-time">{window.formatRel(n.ts)}</span>
                 {user && user.id === n.userId && (
                   <button
                     className="note-card-delete"
-                    onClick={() => Store.removeNote(n.id)}
+                    onClick={() => window.MyrtaviaStore.removeNote(n.id)}
                     title="Delete note"
                     aria-label="Delete note"
                   >×</button>
@@ -377,9 +335,10 @@ function HotspotNotes({ regionId, poiId, onSignIn, compact }) {
 
       {!user ? (
         <button className="note-signin-prompt" onClick={onSignIn}>
-          <GoogleG size={14} />
-          <span>Sign in to pin notes here</span>
+          Sign in to pin notes here
         </button>
+      ) : !campaign ? (
+        <div className="note-no-campaign">Join or create a campaign to add notes</div>
       ) : adding ? (
         <div className="note-add-form" style={{ '--user-c': user.color }}>
           <textarea

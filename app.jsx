@@ -260,6 +260,7 @@ const MyrtaviaMap = () => {
   const [shownRegion, setShownRegion] = useState(null); // kept rendered during exit anim
   const [zoomFocus, setZoomFocus] = useState({ x: 50, y: 50 });
   const [signInOpen, setSignInOpen] = useState(false);
+  const [campaignsOpen, setCampaignsOpen] = useState(false);
   const [placingMarker, setPlacingMarker] = useState(null); // { icon, scope }
   const [pendingMarker, setPendingMarker] = useState(null); // { icon, scope, x, y }
   const mapRef = useRef(null);
@@ -277,16 +278,14 @@ const MyrtaviaMap = () => {
   const cancelNote = () => setPendingMarker(null);
   const saveNote = (text) => {
     const user = window.MyrtaviaStore.getUser();
-    if (!user || !pendingMarker || !text.trim()) return;
+    const campaign = window.MyrtaviaStore.getActiveCampaign();
+    if (!user || !campaign || !pendingMarker || !text.trim()) return;
     window.MyrtaviaStore.addMarker({
       scope: pendingMarker.scope,
       x: pendingMarker.x,
       y: pendingMarker.y,
       icon: pendingMarker.icon,
       text: text.trim(),
-      userId: user.id,
-      userName: user.name,
-      userColor: user.color,
     });
     setPendingMarker(null);
   };
@@ -441,11 +440,20 @@ const MyrtaviaMap = () => {
       )}
 
       <div className="auth-slot">
-        <window.AuthBadge onOpenSignIn={() => setSignInOpen(true)} />
+        <window.AuthBadge
+          onOpenSignIn={() => setSignInOpen(true)}
+          onOpenCampaigns={() => setCampaignsOpen(true)}
+        />
       </div>
+
+      <window.CampaignPromptBanner onOpen={() => setCampaignsOpen(true)} />
 
       {signInOpen && (
         <window.SignInModal onClose={() => setSignInOpen(false)} />
+      )}
+
+      {campaignsOpen && (
+        <window.CampaignsModal onClose={() => setCampaignsOpen(false)} />
       )}
 
       <Legend open={legendOpen} onClose={() => setLegendOpen(false)} />
