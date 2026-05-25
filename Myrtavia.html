@@ -1438,64 +1438,6 @@ body {
 
 .hotspot-card.pinned { width: 320px; }
 
-.signin-google-step {
-  display: flex; flex-direction: column;
-  align-items: center;
-  gap: 14px;
-  padding: 8px 0;
-}
-.signin-google-btn {
-  min-height: 44px;
-  display: flex; justify-content: center;
-}
-.signin-error {
-  font-size: 12px;
-  color: #c53030;
-  background: #fff5f5;
-  border: 1px solid #fed7d7;
-  padding: 8px 12px;
-  border-radius: 4px;
-  text-align: center;
-  font-family: inherit;
-  max-width: 320px;
-}
-.signin-google-summary {
-  display: flex; align-items: center; gap: 12px;
-  padding: 10px 12px;
-  border: 1px solid #dadce0;
-  border-radius: 8px;
-  background: #f8f9fa;
-}
-.sgs-avatar {
-  width: 40px; height: 40px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  object-fit: cover;
-}
-.sgs-avatar.fallback {
-  background: #1a73e8;
-  color: #fff;
-  display: flex; align-items: center; justify-content: center;
-  font-weight: 500;
-  font-size: 18px;
-}
-.sgs-info { min-width: 0; flex: 1; }
-.sgs-name {
-  font-size: 14px;
-  color: #202124;
-  font-weight: 500;
-}
-.sgs-email {
-  font-size: 12px;
-  color: #5f6368;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.signin-account-avatar.img,
-.auth-avatar.img {
-  object-fit: cover;
-  border: none;
-}
-
 /* ─── User markers ─────────────────────────────────── */
 .add-marker-slot.world {
   position: absolute;
@@ -2379,7 +2321,6 @@ body {
 <body>
   <div id="root"></div>
 
-  <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
   <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
